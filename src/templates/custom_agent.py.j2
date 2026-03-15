@@ -1,0 +1,29 @@
+import os
+from agno.agent import Agent
+# from agno.models.your_model import YourModel
+
+from textwrap import dedent
+
+from agents.agents.base_agent import BaseAgent
+# from models.agent_model import CustomRequest, CustomResponse
+
+class CustomAgent(BaseAgent):
+    name = "CustomAgent"
+    model = YourModel(id="your-model")
+
+    def build(self, *args, **kwargs):
+        return Agent(
+            name=self.name,
+            model=self.model,
+            # db=self._get_db("custom_agent_sessions"),
+            description="Your custom agent description here",
+            instructions=dedent("""
+                Your custom agent instructions here. You can use markdown formatting.
+            """),
+            # tools=kwargs.get("tools", []),
+            # output_schema=CustomResponse,
+            # input_schema=CustomRequest,
+            # add_history_to_context=True,
+            # num_history_runs=5,
+            # markdown=True
+        )

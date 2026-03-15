@@ -1,0 +1,42 @@
+import os
+from pymongo import MongoClient
+from pymongo.database import Database
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class DatabaseConnector:
+    client: MongoClient = None
+    db: Database = None
+
+db_connector = DatabaseConnector()
+
+def connect_db():
+    """Initializes the MongoDB client."""
+    mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    db_name = os.getenv("DB_NAME", "your_db_name")
+    
+    if db_connector.client is None:
+        db_connector.client = MongoClient(mongodb_uri)
+        db_connector.db = db_connector.client[db_name]
+        print(f"Connected to MongoDB: {db_name}")
+
+def disconnect_db():
+    """Closes the MongoDB client connection."""
+    if db_connector.client:
+        db_connector.client.close()
+        db_connector.client = None
+        db_connector.db = None
+        print("Disconnected from MongoDB")
+
+def get_client() -> MongoClient:
+    """Returns the current MongoDB client instance."""
+    if db_connector.client is None:
+        connect_db()
+    return db_connector.client
+
+def get_db() -> Database:
+    """Returns the current MongoDB database instance."""
+    if db_connector.db is None:
+        connect_db()
+    return db_connector.db

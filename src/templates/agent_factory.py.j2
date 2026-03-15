@@ -1,0 +1,17 @@
+from typing import Dict, Type
+from agents.agents.base_agent import BaseAgent
+# from agents.agents.custom_agent import CustomAgent
+
+class AgentFactory:
+    def __init__(self):
+        self.agents: Dict[str, Type[BaseAgent]] = {
+            # "custom_agent": CustomAgent
+        }
+
+    def get_agent(self, name: str, *args, **kwargs):
+        agent = self.agents.get(name)
+        if not agent:
+            raise ValueError(f"Agent {name} not found")
+        return agent.build(*args, **kwargs)
+
+

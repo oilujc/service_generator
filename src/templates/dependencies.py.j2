@@ -1,0 +1,20 @@
+from fastapi import Depends
+from pymongo.database import Database
+from database.database import get_db
+from agents.agent_factory import AgentFactory
+
+# from services.my_custom_service import MyCustomService
+# from services.custom_agent_service import CustomAgentService
+
+def get_agent_factory() -> AgentFactory:
+    return AgentFactory()
+
+
+# Add your other dependencies here, for example:
+
+# def my_custom_service(db: Database = Depends(get_db)) -> MyCustomService:
+#     return MyCustomService(db)
+
+# Example of an agent service that depends on the database and the agent factory
+# def get_agent_service(db: Database = Depends(get_db), agent_factory: AgentFactory = Depends(get_agent_factory)) -> AccountingAgentService:
+#     return AccountingAgentService(db, agent_factory)

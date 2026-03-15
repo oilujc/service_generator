@@ -1,0 +1,28 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+# from router import daily_journal
+from database.database import connect_db, disconnect_db
+from dotenv import load_dotenv
+
+load_dotenv()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Conexión a la base de datos al iniciar
+    connect_db()
+    yield
+    # Desconexión de la base de datos al finalizar
+    disconnect_db()
+
+app = FastAPI(
+    title="{{ project_name }}",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# app.include_router(daily_journal.router)
+
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "api"}
+
