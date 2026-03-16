@@ -1,0 +1,47 @@
+version: "3"
+
+services:
+    {% if include_mongodb %}
+  mongodb:
+    image: mongo
+    container_name: {{project_name}}_mongo
+    networks:
+      - {{project_name}}-network
+    ports:
+      - '27017:27017'
+    volumes:
+      - ./data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=${DB_NAME}
+      - MONGO_INITDB_ROOT_USERNAME=${DB_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${DB_ROOT_PASS}
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh mongodb://${DB_ROOT_USER}:${DB_ROOT_PASS}@localhost:${DB_PORT}/?authSource=${DB_NAME} --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+        {% endif %}
+  web:
+    container_name: {{project_name}}_web
+    build: .
+    volumes:
+      - .:/code
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    {% if include_mongodb %}
+    depends_on:
+      - mongodb
+    {% endif %}
+    image: {{project_name}}-image
+    networks:
+      - {{project_name}}-network
+  
+networks:
+  {{project_name}}-network:
+    driver: bridge
+
+volumes:
+  dbdata6:

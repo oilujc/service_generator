@@ -1,0 +1,230 @@
+# FastAPI MongoDB Skill (fastapi-mongo-skill)
+
+This skill provides specialized guidance and automation for extending the `accountable` FastAPI codebase. It ensures consistency across the layered architecture (Models, Repositories, Services, Routers, Agents) using FastAPI and MongoDB (pymongo).
+
+## Architecture Overview
+
+- **Database**: `pymongo` (synchronous) with connection management in `app/database/database.py`.
+- **BaseRepository**: Abstract base class in `app/database/repositories/base_repository.py` providing CRUD operations.
+- **Repositories**: Entity-specific repositories in `app/database/repositories/{entity}_repository.py` extending `BaseRepository`.
+- **Models**: Pydantic models in `app/models/` with `id: str` (mapped from `_id`) and a `fromJson` static method.
+- **Services**: Business logic classes in `app/services/` that interact with repositories.
+- **Routers**: FastAPI routers in `app/router/` using dependency injection for services.
+- **Agents**: AI/Workflow components in `app/agents/agents/` inheriting from `BaseAgent`, registered via `AgentFactory`.
+- **Dependencies**: Centralized in `app/dependencies.py`.
+- **Utils**: Common utilities in `app/utils/` including `ResponseException` and `PDFGenerator`.
+
+## Core Workflows
+
+### 1. Create a New Entity (Scaffold)
+
+When creating a new entity (e.g., `Product`), follow this sequence:
+
+1. **Model**: Create `app/models/product_model.py` with Pydantic models and `fromJson` method.
+2. **Repository**: Create `app/database/repositories/product_repository.py` (inheriting from `BaseRepository`).
+3. **Service**: Create `app/services/product_service.py` with business logic.
+4. **Dependency**: Add `get_product_service(db: Database = Depends(get_db))` to `app/dependencies.py`.
+5. **Router**: Create `app/router/product.py` and register in `app/main.py` with `app.include_router(product.router)`.
+
+### 2. Project Structure
+
+```
+app/
+├── database/
+│   ├── database.py              # MongoDB connection management
+│   └── repositories/
+│       ├── base_repository.py   # Base CRUD operations
+│       └── {entity}_repository.py
+├── models/
+│   └── {entity}_model.py        # Pydantic models
+├── services/
+│   └── {entity}_service.py      # Business logic
+├── router/
+│   └── {entity}.py              # FastAPI routes
+├── agents/
+│   ├── agent_factory.py         # Agent registration factory
+│   └── agents/
+│       ├── base_agent.py        # Abstract base agent
+│       └── {entity}_agent.py
+├── utils/                       # Common utilities
+│   ├── response_exception.py    # HTTP exception handler
+├── dependencies.py              # Dependency injection setup
+└── main.py                      # FastAPI application entry point
+```
+
+### 3. Implementation Standards
+
+#### Model Template (`app/models/entity_model.py`)
+
+```python
+from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field
+
+class Entity(BaseModel):
+    id: Optional[str] = None
+    # fields...
+
+    @staticmethod
+    def fromJson(data: Dict[str, Any]) -> "Entity":
+        if not data:
+            return None
+        return Entity(
+            id=str(data.get("_id") or data.get("id")),
+            # mapping...
+        )
+
+class EntityRequest(BaseModel):
+    # Request/Input models
+    pass
+```
+
+#### Repository Template (`app/database/repositories/entity_repository.py`)
+
+```python
+from pymongo.database import Database
+from bson import ObjectId
+from .base_repository import BaseRepository
+from models.entity_model import Entity
+from typing import Optional, List
+
+class EntityRepository(BaseRepository):
+    """
+    Independent repository for Entity.
+    Inherits CRUD operations from BaseRepository.
+    """
+    def __init__(self, db: Database):
+        super().__init__(db, "entities")
+    
+    def get_entity(self, id: str) -> Optional[Entity]:
+        """Fetch single entity and convert to model."""
+        data = self.get_by_id(id)
+        return Entity.fromJson(data) if data else None
+    
+    def get_all_entities(self, filter_query: Dict[str, Any] = {}) -> List[Entity]:
+        """Fetch all entities and convert to models."""
+        data_list = self.get_all(filter_query)
+        return [Entity.fromJson(data) for data in data_list if data]
+    
+    # Custom queries using pymongo operations
+    def update_field(self, entity_id: str, field: str, value: Any):
+        self.collection.update_one(
+            {"_id": ObjectId(entity_id)},
+            {"$set": {field: value}}
+        )
+```
+
+#### Service Template (`app/services/entity_service.py`)
+
+```python
+from pymongo.database import Database
+from database.repositories.entity_repository import EntityRepository
+from models.entity_model import Entity
+from utils.response_exception import ResponseException
+
+class EntityService:
+    def __init__(self, db: Database):
+        self.repository = EntityRepository(db)
+
+    def create_entity(self, **kwargs) -> str:
+        """Create entity and return ID."""
+        entity_data = {
+            # mapping...
+        }
+        return self.repository.create(entity_data)
+
+    def get_entity(self, entity_id: str) -> Entity:
+        """Get entity or raise 404."""
+        entity = self.repository.get_entity(entity_id)
+        if not entity:
+            raise ResponseException(404, "Entity not found")
+        return entity
+
+    # Business logic methods...
+```
+
+#### Router Template (`app/router/entity.py`)
+
+```python
+from fastapi import APIRouter, Depends, Body
+from dependencies import get_entity_service, get_db
+from services.entity_service import EntityService
+from models.entity_model import Entity, EntityRequest
+from pymongo.database import Database
+
+router = APIRouter(prefix="/entities", tags=["Entity"])
+
+@router.post("/", status_code=201)
+def create_entity(
+    data: EntityRequest = Body(...),
+    service: EntityService = Depends(get_entity_service)
+):
+    entity_id = service.create_entity(**data.dict())
+    return {"id": entity_id, "message": "Entity created successfully"}
+
+@router.get("/{entity_id}", response_model=Entity)
+def get_entity(
+    entity_id: str,
+    service: EntityService = Depends(get_entity_service)
+):
+    return service.get_entity(entity_id)
+
+# Additional routes...
+```
+
+#### Dependency Template (`app/dependencies.py`)
+
+```python
+from fastapi import Depends
+from pymongo.database import Database
+from database.database import get_db
+from services.entity_service import EntityService
+
+def get_entity_service(db: Database = Depends(get_db)) -> EntityService:
+    return EntityService(db)
+```
+
+#### Agent Template (`app/agents/agents/entity_agent.py`)
+
+```python
+import os
+from typing import Any, List
+from agno.agent import Agent
+from agno.models.openai import OpenAIChat
+from .base_agent import BaseAgent
+
+class EntityAgent(BaseAgent):
+    name = "entity_agent"
+    model = OpenAIChat(id=os.getenv("OPENAI_MODEL"))
+    
+    def build(self, *args, **kwargs) -> Agent:
+        return Agent(
+            name=self.name,
+            model=self.model,
+            # Agent configuration...
+        )
+```
+
+## Validation Checklist
+
+- [ ] **Model**: Created in `app/models/{entity}_model.py` with `fromJson` method and `Optional[str]` id field.
+- [ ] **Repository**: Created in `app/database/repositories/{entity}_repository.py` inheriting from `BaseRepository`.
+- [ ] **Service**: Created in `app/services/{entity}_service.py` with business logic and proper error handling.
+- [ ] **Dependency**: Added factory function `get_{entity}_service` to `app/dependencies.py` using `Depends(get_db)`.
+- [ ] **Router**: Created in `app/router/{entity}.py` with proper prefix and tags, registered in `app/main.py`.
+- [ ] **Imports**: Using relative imports within packages (e.g., `from .base_repository import BaseRepository`).
+- [ ] **Error Handling**: Using `ResponseException` for HTTP errors (404, 400, etc.).
+
+## Best Practices
+
+- **Isolation**: Each entity MUST have its own repository file to avoid bloated modules.
+- **Naming**: Use `snake_case` for files and `PascalCase` for classes. End files with `_model.py`, `_repository.py`, `_service.py`, etc.
+- **Imports**: 
+  - Within a package (e.g., `repositories/`), use relative imports: `from .base_repository import BaseRepository`
+  - Across packages, use imports relative to `app/`: `from database.repositories.entity_repository import EntityRepository`
+- **Errors**: Always use `utils.response_exception.ResponseException` for API errors (404, 400, 500).
+- **DB Access**: Always go through a Repository; never access `db` directly in routers or services.
+- **Models**: Use `Optional[str] = None` for id fields to handle new entities.
+- **Repository Methods**: Return model instances (via `fromJson`) not raw dicts in public methods.
+- **Agents**: Register new agents in `AgentFactory` to make them available via dependency injection.
+- **Code Language**: All code must be in English (variables, classes, comments).
+- **Type Hints**: Use type hints for all method parameters and return values.
